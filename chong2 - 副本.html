@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寻宝大冒险 - Vue重构版</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        // 配置Tailwind自定义颜色
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        treasure: {
+                            dark: '#2C1E10',      // 深棕褐色 - 主背景
+                            medium: '#5D4037',    // 中棕褐色 - 次要背景
+                            light: '#EFEBE9',     // 浅棕色 - 文本
+                            gold: '#D4AF37',      // 金色 - 强调色
+                            brown: '#8B4513',     // 棕褐色 - 辅助色
+                            accent: '#CD853F'     // 秘鲁棕色 - 交互元素
+                        }
+                    },
+                    fontFamily: {
+                        adventure: ['Georgia', 'serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            }
+            .animate-float {
+                animation: float 3s ease-in-out infinite;
+            }
+            .animate-pulse-slow {
+                animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            .animate-step {
+                animation: stepIn 0.5s ease-out forwards;
+            }
+            .bg-parchment {
+                background-image: url('https://img.shetu66.com/2023/06/28/1687938454247791.png');
+                background-size: cover;
+                background-position: center;
+                background-attachment: fixed;
+            }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        @keyframes stepIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* 页面切换动画 */
+        .page-transition {
+            animation: pageTransition 0.5s ease-in-out;
+        }
+
+        @keyframes pageTransition {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* 滚动条美化 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(93, 64, 55, 0.2);
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(212, 175, 55, 0.6);
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(212, 175, 55, 0.8);
+        }
+
+        /* 解密区域样式 */
+        .puzzle-container {
+            background: linear-gradient(135deg, #8B4513, #5D4037);
+            border: 2px solid #D4AF37;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .puzzle-input {
+            background: rgba(44, 30, 16, 0.8);
+            border: 2px solid #CD853F;
+            color: #EFEBE9;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .puzzle-hint {
+            background: rgba(212, 175, 55, 0.1);
+            border-left: 4px solid #D4AF37;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        /* 用户菜单样式 */
+        .user-menu {
+            position: relative;
+            display: inline-block;
+        }
+
+        .user-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: #2C1E10;
+            border: 1px solid #D4AF37;
+            border-radius: 8px;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            margin-top: 8px;
+        }
+
+        .user-dropdown-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-bottom: 1px solid #5D4037;
+        }
+
+        .user-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-dropdown-item:hover {
+            background-color: #5D4037;
+        }
+
+        /* 音乐播放器样式 */
+        .music-player {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(44, 30, 16, 0.9);
+            border: 2px solid #D4AF37;
+            border-radius: 15px;
+            padding: 15px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            min-width: 200px;
+        }
+
+        .volume-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #5D4037;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #D4AF37;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-treasure-dark text-treasure-light font-adventure min-h-screen">
+    <div id="app">
+        <!-- 导航栏 -->
+        <nav class="bg-treasure-dark bg-opacity-90 backdrop-blur-sm border-b border-treasure-gold/50 py-4 px-6 sticky top-0 z-50">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-treasure-gold">
+                    <i class="fa fa-map-signs mr-2"></i>寻宝大冒险
+                </h1>
+                <div class="flex items-center space-x-4">
+                    <!-- 用户菜单 -->
+                    <div class="user-menu" v-if="currentUser">
+                        <button @click="toggleUserMenu" class="flex items-center text-treasure-light hover:text-treasure-gold transition-colors">
+                            <i class="fa fa-user mr-2"></i>{{ currentUser.username }}
+                            <i class="fa fa-caret-down ml-1"></i>
+                        </button>
+                        <div v-if="showUserMenu" class="user-dropdown">
+                            <div class="user-dropdown-item" @click="goToUserProfile">
+                                <i class="fa fa-user-circle mr-2"></i>个人资料
+                            </div>
+                            <div class="user-dropdown-item" @click="goToSettings">
+                                <i class="fa fa-cog mr-2"></i>设置
+                            </div>
+                            <div class="user-dropdown-item" @click="logout" style="color: #ff6b6b;">
+                                <i class="fa fa-sign-out mr-2"></i>退出登录
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button @click="currentPage = 'login'" v-if="!currentUser" class="bg-treasure-gold hover:bg-treasure-gold/80 text-treasure-dark font-bold py-2 px-4 rounded-full transition-all">
+                        登录/注册
+                    </button>
+                    <button @click="currentPage = 'ranking'" class="bg-treasure-brown hover:bg-treasure-accent text-treasure-light font-bold py-2 px-4 rounded-full transition-all">
+                        <i class="fa fa-trophy mr-1"></i>排行榜
+                    </button>
+                    <button @click="toggleMusicPlayer" class="bg-treasure-gold/80 hover:bg-treasure-gold text-treasure-dark w-10 h-10 rounded-full flex items-center justify-center transition-all">
+                        <i :class="isMusicOn ? 'fa fa-music' : 'fa fa-volume-off'"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 音乐播放器 -->
+        <div v-if="showMusicPlayer" class="music-player">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-treasure-gold font-bold">
+                    <i class="fa fa-music mr-2"></i>背景音乐
+                </h3>
+                <button @click="toggleMusic" class="text-treasure-light hover:text-treasure-gold">
+                    <i :class="isMusicOn ? 'fa fa-pause' : 'fa fa-play'"></i>
+                </button>
+            </div>
+            
+            <div class="mb-3">
+                <div class="flex justify-between text-sm text-treasure-light/80 mb-1">
+                    <span>音量</span>
+                    <span>{{ volume }}%</span>
+                </div>
+                <input 
+                    type="range" 
+                    min="0" 
+                    max="100" 
+                    v-model="volume" 
+                    @input="updateVolume"
+                    class="volume-slider"
+                >
+            </div>
+            
+            <div class="text-xs text-treasure-light/60">
+                当前曲目: {{ currentTrackName }}
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <main class="min-h-screen">
+            <!-- 地图页面 -->
+            <div v-if="currentPage === 'map'" class="relative min-h-screen">
+                <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('https://img-baofun.zhhainiao.com/fs/01cef6deb8ef2240f56b4947ed561d88.jpg'); filter: brightness(0.5) sepia(0.3);"></div>
+                
+                <div class="container mx-auto px-4 relative z-10 pt-16">
+                    <div class="text-center mb-12">
+                        <h1 class="text-[clamp(2.5rem,8vw,5rem)] font-bold text-treasure-gold text-shadow mb-4 animate-float">
+                            <i class="fa fa-map-signs mr-3"></i>寻宝大冒险
+                        </h1>
+                        <p class="text-xl max-w-2xl mx-auto text-treasure-light/90">按照顺序寻宝，每个地点都有独特的挑战和解密</p>
+                    </div>
+                    
+                    <!-- 地点标记 -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto mb-16">
+                        <location-card 
+                            v-for="location in locations" 
+                            :key="location.id"
+                            :location="location"
+                            @select="goToLocation">
+                        </location-card>
+                    </div>
+                </div>
+                
+                <!-- 游戏状态提示 -->
+                <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-treasure-dark bg-opacity-70 backdrop-blur-sm px-6 py-3 rounded-full border border-treasure-brown/30">
+                    <p class="text-sm text-treasure-light/80">自动保存游戏进度...</p>
+                </div>
+            </div>
+
+            <!-- 其他页面内容保持不变 -->
+            <!-- 游戏页面 -->
+            <div v-if="currentPage === 'game'" class="relative min-h-screen">
+                <!-- 页面背景 -->
+                <div class="fixed inset-0 bg-parchment opacity-20 z-0"></div>
+                
+                <div class="container mx-auto px-4 py-8 relative z-10">
+                    <!-- 顶部控制区 -->
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                        <div>
+                            <h1 class="text-[clamp(1.8rem,5vw,3rem)] font-bold text-treasure-gold text-shadow mb-2 animate-float">
+                                <i class="fa fa-map-signs mr-3"></i>{{ currentLocation.name }}寻宝
+                            </h1>
+                            <p class="text-lg opacity-80">跟随线索，解开谜题，找到隐藏的宝藏...</p>
+                        </div>
+                        
+                        <div class="flex gap-4">
+                            <button @click="backToMap" class="bg-treasure-brown hover:bg-treasure-accent text-treasure-light font-bold py-2 px-6 rounded-full text-base transition-all transform hover:scale-105">
+                                <i class="fa fa-arrow-left mr-2"></i>返回地图
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 控制按钮 -->
+                    <div class="mb-6">
+                        <button @click="startAdventure" v-if="!gameState.isPlaying" class="bg-treasure-gold hover:bg-treasure-gold/80 text-treasure-dark font-bold py-2 px-6 rounded-full text-base transition-all transform hover:scale-105">
+                            <i class="fa fa-compass mr-2"></i>开始冒险
+                        </button>
+                        <button @click="resetGame" v-if="gameState.isPlaying || gameState.storyContent.length > 0" class="bg-transparent border-2 border-treasure-gold text-treasure-gold hover:bg-treasure-gold hover:text-treasure-dark font-bold py-2 px-6 rounded-full text-base transition-all transform hover:scale-105 ml-4">
+                            <i class="fa fa-refresh mr-2"></i>重新开始
+                        </button>
+                    </div>
+                    
+                    <!-- 进度条 -->
+                    <div class="w-full bg-treasure-medium/30 rounded-full h-3 mb-6 overflow-hidden">
+                        <div class="bg-treasure-gold h-full rounded-full transition-all duration-500" :style="{width: progressPercentage + '%'}"></div>
+                    </div>
+                    
+                    <!-- 步骤指示器 -->
+                    <div class="flex justify-between mb-8 px-2 overflow-x-auto pb-2">
+                        <step-indicator 
+                            v-for="(step, index) in currentLocationData.steps" 
+                            :key="index"
+                            :step="step"
+                            :index="index"
+                            :current-step="gameState.currentStep"
+                            :icon="currentLocationData.icons[index]">
+                        </step-indicator>
+                    </div>
+                    
+                    <!-- 主要内容区域 - 左右布局 -->
+                    <div class="flex flex-col lg:flex-row gap-6">
+                        <!-- 左侧：游戏界面/故事区域 -->
+                        <div class="w-full lg:w-1/2 bg-treasure-dark bg-opacity-70 backdrop-blur-sm rounded-xl p-5 border-2 border-treasure-brown/50 min-h-[500px] relative overflow-hidden">
+                            <!-- 背景装饰 -->
+                            <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                                <i class="fa fa-map absolute top-10 left-10 text-6xl text-treasure-gold"></i>
+                                <i class="fa fa-chest absolute bottom-10 right-10 text-6xl text-treasure-gold"></i>
+                            </div>
+                            
+                            <!-- 初始提示 -->
+                            <div v-if="gameState.storyContent.length === 0" class="text-center py-16">
+                                <p class="text-lg mb-6">点击"开始冒险"按钮，开启你的寻宝之旅</p>
+                                <i class="fa fa-hand-pointer-o text-treasure-gold text-3xl animate-pulse-slow"></i>
+                            </div>
+                            
+                            <!-- 故事内容区域 -->
+                            <div v-else class="space-y-4 max-h-[480px] overflow-y-auto pr-2 custom-scrollbar">
+                                <story-step 
+                                    v-for="(story, index) in gameState.storyContent" 
+                                    :key="index"
+                                    :story="story"
+                                    :index="index">
+                                </story-step>
+
+                                <!-- 解密区域 -->
+                                <div v-if="showPuzzle" class="puzzle-container mt-6">
+                                    <h3 class="text-treasure-gold font-bold text-lg mb-4">
+                                        <i class="fa fa-puzzle-piece mr-2"></i>解密挑战
+                                    </h3>
+                                    <div v-if="currentPuzzle">
+                                        <p class="mb-3">{{ currentPuzzle.question }}</p>
+                                        
+                                        <div v-if="currentPuzzle.type === 'riddle'">
+                                            <input 
+                                                v-model="puzzleAnswer" 
+                                                @keyup.enter="checkPuzzle"
+                                                placeholder="输入你的答案..."
+                                                class="puzzle-input"
+                                            >
+                                            <div class="puzzle-hint" v-if="currentPuzzle.hint">
+                                                <i class="fa fa-lightbulb-o mr-2 text-treasure-gold"></i>
+                                                提示: {{ currentPuzzle.hint }}
+                                            </div>
+                                        </div>
+
+                                        <div v-else-if="currentPuzzle.type === 'code'">
+                                            <div class="grid grid-cols-4 gap-2 mb-4">
+                                                <button 
+                                                    v-for="num in [1,2,3,4,5,6,7,8,9,0]" 
+                                                    :key="num"
+                                                    @click="enterCode(num)"
+                                                    class="bg-treasure-brown hover:bg-treasure-accent text-treasure-light font-bold py-3 rounded transition-all"
+                                                >
+                                                    {{ num }}
+                                                </button>
+                                                <button 
+                                                    @click="clearCode"
+                                                    class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded col-span-2 transition-all"
+                                                >
+                                                    清除
+                                                </button>
+                                            </div>
+                                            <div class="text-center mb-4">
+                                                <span class="text-xl font-mono bg-treasure-dark p-2 rounded">
+                                                    {{ codeInput || '____' }}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div v-else-if="currentPuzzle.type === 'sequence'">
+                                            <div class="flex gap-2 mb-4 flex-wrap">
+                                                <button 
+                                                    v-for="item in sequenceOptions" 
+                                                    :key="item"
+                                                    @click="selectSequence(item)"
+                                                    :class="[
+                                                        'px-4 py-2 rounded transition-all',
+                                                        selectedSequence.includes(item) 
+                                                            ? 'bg-treasure-gold text-treasure-dark' 
+                                                            : 'bg-treasure-brown text-treasure-light hover:bg-treasure-accent'
+                                                    ]"
+                                                >
+                                                    {{ item }}
+                                                </button>
+                                            </div>
+                                            <div class="text-center mb-4">
+                                                <p>已选择: {{ selectedSequence.join(' → ') || '请选择顺序' }}</p>
+                                            </div>
+                                            <button @click="clearSequence" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded mr-2">
+                                                重置顺序
+                                            </button>
+                                        </div>
+
+                                        <button 
+                                            @click="checkPuzzle"
+                                            :disabled="!canSubmitPuzzle"
+                                            class="bg-treasure-gold hover:bg-treasure-gold/80 text-treasure-dark font-bold py-2 px-6 rounded-full transition-all mt-4"
+                                        >
+                                            <i class="fa fa-check mr-2"></i>提交答案
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 加载指示器 -->
+                            <div v-if="gameState.isLoading" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                                <div class="w-12 h-12 border-4 border-treasure-brown border-t-4 border-t-treasure-gold rounded-full animate-spin mx-auto mb-4"></div>
+                                <p>正在进行中...</p>
+                            </div>
+                        </div>
+                        
+                        <!-- 右侧：图片展示区域 -->
+                        <div v-if="gameState.currentImage" class="w-full lg:w-1/2 rounded-xl overflow-hidden border-2 border-treasure-gold/70 min-h-[500px] shadow-lg">
+                            <img :src="gameState.currentImage" alt="冒险场景" class="w-full h-full object-cover">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 登录/注册页面 -->
+            <div v-if="currentPage === 'login'" class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-treasure-dark to-treasure-medium">
+                <div class="max-w-md w-full space-y-8 bg-treasure-dark bg-opacity-80 backdrop-blur-sm p-8 rounded-xl border border-treasure-gold/50 shadow-xl">
+                    <div>
+                        <h2 class="mt-6 text-center text-3xl font-extrapold text-treasure-gold">
+                            {{ isLoginMode ? '登录' : '注册' }}
+                        </h2>
+                    </div>
+                    <form class="mt-8 space-y-6" @submit.prevent="handleAuth">
+                        <div class="rounded-md shadow-sm -space-y-px">
+                            <div>
+                                <label for="username" class="sr-only">用户名</label>
+                                <input id="username" v-model="authForm.username" type="text" required class="relative block w-full px-3 py-2 border border-treasure-brown/70 placeholder-treasure-light/50 text-treasure-light bg-treasure-dark rounded-t-md focus:outline-none focus:ring-treasure-gold focus:border-treasure-gold focus:z-10" placeholder="用户名">
+                            </div>
+                            <div>
+                                <label for="password" class="sr-only">密码</label>
+                                <input id="password" v-model="authForm.password" type="password" required class="relative block w-full px-3 py-2 border border-treasure-brown/70 border-t-0 placeholder-treasure-light/50 text-treasure-light bg-treasure-dark rounded-b-md focus:outline-none focus:ring-treasure-gold focus:border-treasure-gold focus:z-10" placeholder="密码">
+                            </div>
+                        </div>
+
+                        <div>
+                            <button type="submit" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-treasure-dark bg-treasure-gold hover:bg-treasure-gold/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-treasure-gold transition-colors">
+                                {{ isLoginMode ? '登录' : '注册' }}
+                            </button>
+                        </div>
+                        
+                        <div class="text-center">
+                            <button type="button" @click="toggleAuthMode" class="text-treasure-gold hover:text-treasure-gold/80 transition-colors">
+                                {{ isLoginMode ? '没有账号？点击注册' : '已有账号？点击登录' }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 排行榜页面 -->
+            <div v-if="currentPage === 'ranking'" class="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-treasure-dark to-treasure-medium">
+                <div class="max-w-4xl mx-auto">
+                    <h2 class="text-3xl font-bold text-center text-treasure-gold mb-8">
+                        <i class="fa fa-trophy mr-2"></i>寻宝英雄榜
+                    </h2>
+                    
+                    <div class="bg-treasure-dark bg-opacity-80 backdrop-blur-sm rounded-xl border border-treasure-gold/50 overflow-hidden shadow-lg">
+                        <div class="grid grid-cols-12 gap-4 p-4 border-b border-treasure-brown/50 text-treasure-gold font-bold">
+                            <div class="col-span-1">排名</div>
+                            <div class="col-span-5">玩家</div>
+                            <div class="col-span-3">完成地点</div>
+                            <div class="col-span-3">得分</div>
+                        </div>
+                        
+                        <div class="max-h-96 overflow-y-auto custom-scrollbar">
+                            <ranking-row 
+                                v-for="(user, index) in rankedUsers" 
+                                :key="user.id"
+                                :user="user"
+                                :rank="index + 1"
+                                :is-current-user="currentUser && user.id === currentUser.id">
+                            </ranking-row>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-8 text-center">
+                        <button @click="currentPage = 'map'" class="bg-treasure-brown hover:bg-treasure-accent text-treasure-light font-bold py-2 px-6 rounded-full transition-all">
+                            <i class="fa fa-arrow-left mr-2"></i>返回地图
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 个人资料页面 -->
+            <div v-if="currentPage === 'profile'" class="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-treasure-dark to-treasure-medium">
+                <div class="max-w-2xl mx-auto">
+                    <h2 class="text-3xl font-bold text-center text-treasure-gold mb-8">
+                        <i class="fa fa-user-circle mr-2"></i>个人资料
+                    </h2>
+                    
+                    <div class="bg-treasure-dark bg-opacity-80 backdrop-blur-sm rounded-xl border border-treasure-gold/50 overflow-hidden shadow-lg p-6">
+                        <div class="flex flex-col md:flex-row items-center mb-6">
+                            <div class="w-24 h-24 rounded-full bg-treasure-gold flex items-center justify-center mb-4 md:mb-0 md:mr-6">
+                                <i class="fa fa-user text-4xl text-treasure-dark"></i>
+                            </div>
+                            <div class="text-center md:text-left">
+                                <h3 class="text-2xl font-bold text-treasure-gold">{{ currentUser.username }}</h3>
+                                <p class="text-treasure-light/80">寻宝探险家</p>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div class="bg-treasure-medium/30 p-4 rounded-lg">
+                                <h4 class="text-treasure-gold font-bold mb-2">冒险统计</h4>
+                                <p>完成地点: {{ currentUser.completedLocations || 0 }}/3</p>
+                                <p>总得分: {{ currentUser.score || 0 }}</p>
+                            </div>
+                            <div class="bg-treasure-medium/30 p-4 rounded-lg">
+                                <h4 class="text-treasure-gold font-bold mb-2">游戏进度</h4>
+                                <p>注册时间: {{ currentUser.registerTime || '未知' }}</p>
+                                <p>最后登录: {{ currentUser.lastLogin || '刚刚' }}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center">
+                            <button @click="currentPage = 'map'" class="bg-treasure-brown hover:bg-treasure-accent text-treasure-light font-bold py-2 px-6 rounded-full transition-all mr-4">
+                                <i class="fa fa-arrow-left mr-2"></i>返回地图
+                            </button>
+                            <button @click="logout" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-full transition-all">
+                                <i class="fa fa-sign-out mr-2"></i>退出登录
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设置页面 -->
+            <div v-if="currentPage === 'settings'" class="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-treasure-dark to-treasure-medium">
+                <div class="max-w-2xl mx-auto">
+                    <h2 class="text-3xl font-bold text-center text-treasure-gold mb-8">
+                        <i class="fa fa-cog mr-2"></i>游戏设置
+                    </h2>
+                    
+                    <div class="bg-treasure-dark bg-opacity-80 backdrop-blur-sm rounded-xl border border-treasure-gold/50 overflow-hidden shadow-lg p-6">
+                        <div class="space-y-6">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-lg font-bold text-treasure-gold">背景音乐</h3>
+                                    <p class="text-treasure-light/80">开启或关闭游戏背景音乐</p>
+                                </div>
+                                <button @click="toggleMusic" :class="isMusicOn ? 'bg-treasure-gold text-treasure-dark' : 'bg-treasure-medium text-treasure-light'" class="w-12 h-6 rounded-full p-1 transition-colors">
+                                    <div :class="isMusicOn ? 'translate-x-6 bg-treasure-dark' : 'translate-x-0 bg-treasure-light'" class="w-4 h-4 rounded-full transition-transform"></div>
+                                </button>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-lg font-bold text-treasure-gold">音效</h3>
+                                    <p class="text-treasure-light/80">游戏音效开关</p>
+                                </div>
+                                <button @click="toggleSound" :class="isSoundOn ? 'bg-treasure-gold text-treasure-dark' : 'bg-treasure-medium text-treasure-light'" class="w-12 h-6 rounded-full p-1 transition-colors">
+                                    <div :class="isSoundOn ? 'translate-x-6 bg-treasure-dark' : 'translate-x-0 bg-treasure-light'" class="w-4 h-4 rounded-full transition-transform"></div>
+                                </button>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-lg font-bold text-treasure-gold">自动保存</h3>
+                                    <p class="text-treasure-light/80">自动保存游戏进度</p>
+                                </div>
+                                <button :class="true ? 'bg-treasure-gold text-treasure-dark' : 'bg-treasure-medium text-treasure-light'" class="w-12 h-6 rounded-full p-1 transition-colors">
+                                    <div :class="true ? 'translate-x-6 bg-treasure-dark' : 'translate-x-0 bg-treasure-light'" class="w-4 h-4 rounded-full transition-transform"></div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-8 text-center">
+                            <button @click="currentPage = 'map'" class="bg-treasure-brown hover:bg-treasure-accent text-treasure-light font-bold py-2 px-6 rounded-full transition-all mr-4">
+                                <i class="fa fa-arrow-left mr-2"></i>返回地图
+                            </button>
+                            <button @click="logout" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-full transition-all">
+                                <i class="fa fa-sign-out mr-2"></i>退出登录
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // 游戏数据
+        const LocationData = {
+            library: {
+                steps: [
+                    {
+                        title: "进入图书馆",
+                        success: {
+                            message: "你推开沉重的橡木大门，进入了布满灰尘的古老图书馆，书架高耸入云，空气中弥漫着旧书的味道。",
+                            image: "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+                        },
+                        failure: {
+                            message: "图书馆大门被铁链紧锁，无论你怎么用力都无法打开，只能放弃。",
+                            image: "https://imgs.qiubiaoqing.com/qiubiaoqing/imgs/67c6684f5f78d7fM.gif"
+                        },
+                        failRate: 0.2
+                    },
+                    {
+                        title: "寻找线索",
+                        success: {
+                            message: "在一个不起眼的角落，你发现了一本被虫蛀的古籍，里面夹着一张羊皮纸地图，上面有模糊的标记。",
+                            image: "https://www.rcicn.com/upload/images/2023/9/1981225bb3504d67.jpg"
+                        },
+                        failure: {
+                            message: "你在图书馆里翻找了几个小时，查阅了无数书籍，却没有找到任何有价值的线索。",
+                            image: "https://imgs.qiubiaoqing.com/qiubiaoqing/imgs/67c6684f5f78d7fM.gif"
+                        },
+                        failRate: 0.3
+                    },
+                    {
+                        title: "解码地图",
+                        success: {
+                            message: "通过查阅馆内的解密书籍，你成功解读了地图上的符号，发现宝藏藏在瀑布后面的神庙中。",
+                            image: "https://img1.qunarzz.com/travel/d3/1804/1c/71eb48d9508d5b5.jpg"
+                        },
+                        failure: {
+                            message: "地图上的古老文字太过晦涩，你无法解读其中的含义，线索中断。",
+                            image: "https://imgs.qiubiaoqing.com/qiubiaoqing/imgs/67c6684f5f78d7fM.gif"
+                        },
+                        failRate: 0.4,
+                        puzzle: {
+                            type: "riddle",
+                            question: "我有钥匙却打不开锁，有空间却没有房间，你可以进入但不能离开。我是什么？",
+                            answer: "键盘",
+                            hint: "想想你正在使用的东西"
+                        }
+                    },
+                    {
+                        title: "前往瀑布",
+                        success: {
+                            message: "你整理好行囊，根据地图指示，踏上了前往神秘瀑布的旅程，准备寻找那座隐藏的神庙。",
+                            image: "https://img95.699pic.com/photo/60071/6842.jpg_wh860.jpg"
+                        },
+                        failure: {
+                            message: "出发前夕，你遭遇了突如其来的暴雨，山路变得湿滑难行，无法按计划前往瀑布。",
+                            image: "https://img95.699pic.com/photo/60075/5414.jpg_wh300.jpg!/fh/300/quality/90"
+                        },
+                        failRate: 0.2
+                    }
+                ],
+                icons: ['fa-university', 'fa-search', 'fa-code', 'fa-compass'],
+                score: 100
+            },
+            waterfall: {
+                steps: [
+                    {
+                        title: "抵达瀑布",
+                        success: {
+                            message: "经过数日跋涉，你终于抵达了神秘瀑布，巨大的水流从悬崖上倾泻而下，声势浩大。",
+                            image: "https://img.soogif.com/RShUjU4fYyh7xWLGJ88c5Kiy2q2gwnoR.gif"
+                        },
+                        failure: {
+                            message: "你在前往瀑布的途中迷路了，四周都是茂密的森林，无法找到正确的方向。",
+                            image: "https://ts1.tc.mm.bing.net/th/id/R-C.ef6a1f69dd08d5fd06b29c7051818eb9?rik=37gnJPJwk9vj6A&riu=http%3a%2f%2f5b0988e595225.cdn.sohucs.com%2fimages%2f20171109%2fa16011f851764255980fdb325a9ea16a.gif&ehk=thBL%2baRCiyYiJC5YjGVV2ASqLC1H98JVpywca%2ffZcuY%3d&risl=&pid=ImgRaw&r=0"
+                        },
+                        failRate: 0.3
+                    },
+                    {
+                        title: "穿过瀑布",
+                        success: {
+                            message: "你找到了水流较缓的地方，屏住呼吸穿过瀑布，虽然浑身湿透，但成功到达了瀑布后面。",
+                            image: "https://img.soogif.com/m6kMM5BWDTFBoOHUCL6F69TV5QniAOeE.gif"
+                        },
+                        failure: {
+                            message: "水流太过湍急，你尝试靠近时被强大的水流冲击，差点被冲走，只能放弃。",
+                            image: "https://wimg.588ku.com/gif/21/09/29/d22eac5c62eb6c12a214fa8cda87d833.gif"
+                        },
+                        failRate: 0.5,
+                        puzzle: {
+                            type: "code",
+                            question: "石门上有四个数字锁，刻着：'瀑布的高度是数字之和的两倍'。已知瀑布高52米，请输入正确的四位数密码。",
+                            answer: "1348",
+                            hint: "52 ÷ 2 = 26，四个数字加起来等于26"
+                        }
+                    },
+                    {
+                        title: "寻找神庙大门",
+                        success: {
+                            message: "在瀑布后面，你发现了一处被藤蔓掩盖的石门，上面刻有古老的图案，这一定是神庙的入口！",
+                            image: "https://q7.itc.cn/q_70/images01/20240319/377419499ae64e32a4f387db358ee5d8.jpeg"
+                        },
+                        failure: {
+                            message: "瀑布后面只有光滑的岩壁，没有任何建筑的痕迹，也许地图上的标记有误？",
+                            image: "https://img95.699pic.com/photo/60073/8461.jpg_wh300.jpg!/fh/300/quality/90"
+                        },
+                        failRate: 0.3
+                    }
+                ],
+                icons: ['fa-map-marker', 'fa-tint', 'fa-unlock-alt'],
+                score: 150
+            },
+            temple: {
+                steps: [
+                    {
+                        title: "抵达神庙门口",
+                        success: {
+                            message: "你来到神庙巨大的石门前，门楣楣上雕刻着神秘的符号，散发着庄严而神秘的气息。",
+                            image: "https://img1.jiemian.com/101/original/20170529/14960586214547600_a700xH.jpg"
+                        },
+                        failure: {
+                            message: "神庙周围布满了深沟，你找不到安全的路径到达门口，只能远远观望。",
+                            image: "https://img95.699pic.com/photo/60045/7610.jpg_wh860.jpg"
+                        },
+                        failRate: 0.2
+                    },
+                    {
+                        title: "破译石门密码",
+                        success: {
+                            message: "通过解读石门上的符号，你成功输入了正确的密码，沉重的石门发出gazhi声，缓缓打开。",
+                            image: "https://pic.vjshi.com/2023-04-03/a009bad2263049c086bcc85914dd9da5/online/831eadf96014479c993550404e54e372.jpg?x-oss-process=style/w1440_h2880"
+                        },
+                        failure: {
+                            message: "你尝试了多种组合，但都无法破解石门密码，石门纹丝不动，挡住了你的去路。",
+                            image: "https://bbs-static.miyoushe.com/static/2023/11/08/660298761d124d27695ecbde81e0a738_969282218180339896.gif"
+                        },
+                        failRate: 0.6,
+                        puzzle: {
+                            type: "sequence",
+                            question: "按照正确的顺序按下四个符号：太阳、月亮、星星、山。线索：'日出月落，星现山巅'",
+                            answer: ["太阳", "月亮", "星星", "山"],
+                            hint: "按照自然现象的顺序思考"
+                        }
+                    },
+                    {
+                        title: "寻找宝藏",
+                        success: {
+                            message: "在神庙深处，你找到了一个华丽的宝箱，里面装满了黄金和宝石，你成功找到了传说中的宝藏！",
+                            image: "https://img95.699pic.com/photo/60039/9771.jpg_wh860.jpg"
+                        },
+                        failure: {
+                            message: "就在你即将找到宝藏时，神庙的守卫出现了，他们把你抓了起来，寻宝之旅以失败告终。",
+                            image: "https://down.cg99.com/v1/model/2021-04-01/rtz5tPiXdCShxrP52RZYJGXD7atra85M.gif?x-oss-process=image/resize,w_1398,h_760"
+                        },
+                        failRate: 0.4,
+                        puzzle: {
+                            type: "riddle",
+                            question: "最后的考验：'我说话却没有嘴，我奔跑却没有腿，我有床却不睡觉，我有头却不思考。我是什么？'",
+                            answer: "河流",
+                            hint: "想想自然界中流动的东西"
+                        }
+                    }
+                ],
+                icons: ['fa-university', 'fa-key', 'fa-diamond'],
+                score: 200
+            }
+        };
+
+        // 解密谜题数据
+        const Puzzles = {
+            library: [
+                {
+                    type: "riddle",
+                    question: "我有钥匙却打不开锁，有空间却没有房间，你可以进入但不能离开。我是什么？",
+                    answer: "键盘",
+                    hint: "想想你正在使用的东西"
+                }
+            ],
+            waterfall: [
+                {
+                    type: "code",
+                    question: "石门上有四个数字锁，刻着：'瀑布的高度是数字之和的两倍'。已知瀑布高52米，请输入正确的四位数密码。",
+                    answer: "1348",
+                    hint: "52 ÷ 2 = 26，四个数字加起来等于26"
+                }
+            ],
+            temple: [
+                {
+                    type: "sequence",
+                    question: "按照正确的顺序按下四个符号：太阳、月亮、星星、山。线索：'日出月落，星现山巅'",
+                    answer: ["太阳", "月亮", "星星", "山"],
+                    hint: "按照自然现象的顺序思考"
+                },
+                {
+                    type: "riddle",
+                    question: "最后的考验：'我说话却没有嘴，我奔跑却没有腿，我有床却不睡觉，我有头却不思考。我是什么？'",
+                    answer: "河流",
+                    hint: "想想自然界中流动的东西"
+                }
+            ]
+        };
+
+        // 游戏数据管理
+        const GameData = {
+            saveData: function(data) {
+                try {
+                    localStorage.setItem('treasureHuntData', JSON.stringify(data));
+                } catch (error) {
+                    console.error('保存游戏数据失败:', error);
+                }
+            },
+            
+            loadData: function() {
+                try {
+                    const data = localStorage.getItem('treasureHuntData');
+                    return data ? JSON.parse(data) : null;
+                } catch (error) {
+                    console.error('加载游戏数据失败:', error);
+                    return null;
+                }
+            },
+            
+            saveUsers: function(users) {
+                try {
+                    localStorage.setItem('treasureHuntUsers', JSON.stringify(users));
+                } catch (error) {
+                    console.error('保存用户数据失败:', error);
+                }
+            },
+            
+            loadUsers: function() {
+                try {
+                    const users = localStorage.getItem('treasureHuntUsers');
+                    return users ? JSON.parse(users) : [];
+                } catch (error) {
+                    console.error('加载用户数据失败:', error);
+                    return [];
+                }
+            }
+        };
+
+        // 组件定义
+        Vue.component('location-card', {
+            props: ['location'],
+            template: `
+                <div class="location-marker flex flex-col items-center p-6 bg-treasure-dark bg-opacity-60 rounded-xl backdrop-blur-sm border border-treasure-brown/50 cursor-pointer transform transition-all duration-300 hover:scale-105 hover:bg-opacity-80" 
+                     @click="$emit('select', location)">
+                    <div class="w-20 h-20 rounded-full bg-treasure-gold/70 flex items-center justify-center mb-4 animate-pulse-slow">
+                        <i :class="'fa ' + location.icon + ' text-3xl text-treasure-dark'"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-treasure-gold mb-2">{{ location.name }}</h3>
+                    <p class="text-center text-sm opacity-80">{{ location.description }}</p>
+                </div>
+            `
+        });
+
+        Vue.component('step-indicator', {
+            props: ['step', 'index', 'currentStep', 'icon'],
+            computed: {
+                isActive() {
+                    return this.index + 1 <= this.currentStep;
+                }
+            },
+            template: `
+                <div class="step-indicator flex flex-col items-center flex-shrink-0 mx-1">
+                    <div :class="isActive ? 
+                        'w-8 h-8 rounded-full bg-treasure-gold text-treasure-dark flex items-center justify-center mb-1 border-2 border-treasure-gold' : 
+                        'w-8 h-8 rounded-full bg-treasure-medium/50 flex items-center justify-center mb-1 border-2 border-transparent'">
+                        <i :class="'fa ' + icon + ' text-sm'"></i>
+                    </div>
+                    <span class="text-xs hidden sm:block">{{ step.title }}</span>
+                </div>
+            `
+        });
+
+        Vue.component('story-step', {
+            props: ['story', 'index'],
+            template: `
+                <div class="p-3 rounded-lg bg-treasure-medium/20 animate-step">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0 w-7 h-7 rounded-full bg-treasure-gold text-treasure-dark flex items-center justify-center mr-3 mt-0.5 font-bold text-sm">{{ story.step }}</div>
+                        <div :class="story.isFinal ? 'text-treasure-gold text-lg font-bold' : ''">
+                            {{ story.text }}
+                            <i v-if="!story.isFinal" :class="'fa ' + (story.isSuccess ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-500') + ' ml-2'"></i>
+                        </div>
+                    </div>
+                </div>
+            `
+        });
+
+        Vue.component('ranking-row', {
+            props: ['user', 'rank', 'isCurrentUser'],
+            computed: {
+                rankClass() {
+                    if (this.rank === 1) return 'bg-yellow-100 text-yellow-800';
+                    if (this.rank === 2) return 'bg-gray-100 text-gray-800';
+                    if (this.rank === 3) return 'bg-amber-100 text-amber-800';
+                    return '';
+                }
+            },
+            template: `
+                <div :class="['grid grid-cols-12 gap-4 p-4 border-b border-treasure-brown/30', isCurrentUser ? 'bg-treasure-gold/20' : '']">
+                    <div class="col-span-1 flex items-center">
+                        <span :class="['inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold', rankClass]">
+                            {{ rank }}
+                        </span>
+                    </div>
+                    <div class="col-span-5 flex items-center">
+                        <i class="fa fa-user mr-2"></i>
+                        {{ user.username }}
+                        <span v-if="isCurrentUser" class="ml-2 text-xs bg-treasure-gold text-treasure-dark px-2 py-1 rounded-full">我</span>
+                    </div>
+                    <div class="col-span-3 flex items-center">
+                        <i class="fa fa-map-marker mr-2"></i>
+                        {{ user.completedLocations }} / 3
+                    </div>
+                    <div class="col-span-3 flex items-center font-bold">
+                        <i class="fa fa-star text-treasure-gold mr-2"></i>
+                        {{ user.score }}
+                    </div>
+                </div>
+            `
+        });
+
+        // Vue应用
+        new Vue({
+            el: '#app',
+            data: {
+                currentPage: 'map',
+                isMusicOn: true,
+                isSoundOn: true,
+                showMusicPlayer: false,
+                volume: 50,
+                currentTrackName: '冒险主题曲',
+                isLoginMode: true,
+                currentUser: null,
+                showUserMenu: false,
+                authForm: {
+                    username: '',
+                    password: ''
+                },
+                users: [],
+                locations: [
+                    {
+                        id: 'library',
+                        name: '古老图书馆',
+                        description: '充满神秘手稿和古代知识的地方，隐藏着解开谜题的关键',
+                        icon: 'fa-book',
+                        music: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3'
+                    },
+                    {
+                        id: 'waterfall',
+                        name: '神秘瀑布',
+                        description: '水流背后隐藏着通往秘密通道的入口，危险与机遇并存',
+                        icon: 'fa-tint',
+                        music: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'
+                    },
+                    {
+                        id: 'temple',
+                        name: '古老神庙',
+                        description: '被遗忘的神圣之地，布满机关陷阱，守护着珍贵宝藏',
+                        icon: 'fa-university',
+                        music: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3'
+                    }
+                ],
+                currentLocation: null,
+                gameState: {
+                    currentStep: 0,
+                    storyContent: [],
+                    isPlaying: false,
+                    isLoading: false,
+                    currentImage: ''
+                },
+                // 解密相关数据
+                showPuzzle: false,
+                currentPuzzle: null,
+                puzzleAnswer: '',
+                codeInput: '',
+                selectedSequence: [],
+                sequenceOptions: ['太阳', '月亮', '星星', '山'],
+                puzzleSolved: false,
+                // 音频对象
+                backgroundMusic: null
+            },
+            computed: {
+                currentLocationData() {
+                    return this.currentLocation ? LocationData[this.currentLocation.id] : {steps: [], icons: []};
+                },
+                progressPercentage() {
+                    if (this.currentLocationData.steps.length === 0) return 0;
+                    return (this.gameState.currentStep / this.currentLocationData.steps.length) * 100;
+                },
+                rankedUsers() {
+                    return [...this.users].sort((a, b) => b.score - a.score);
+                },
+                canSubmitPuzzle() {
+                    if (this.currentPuzzle.type === 'riddle') {
+                        return this.puzzleAnswer.trim().length > 0;
+                    } else if (this.currentPuzzle.type === 'code') {
+                        return this.codeInput.length === 4;
+                    } else if (this.currentPuzzle.type === 'sequence') {
+                        return this.selectedSequence.length === 4;
+                    }
+                    return false;
+                }
+            },
+            methods: {
+                // 音乐控制方法
+                initMusic() {
+                    this.backgroundMusic = new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3');
+                    this.backgroundMusic.loop = true;
+                    this.backgroundMusic.volume = this.volume / 100;
+                    
+                    // 自动播放处理
+                    this.backgroundMusic.addEventListener('canplaythrough', () => {
+                        if (this.isMusicOn) {
+                            this.playMusic();
+                        }
+                    });
+                },
+                
+                playMusic() {
+                    if (this.backgroundMusic && this.isMusicOn) {
+                        this.backgroundMusic.play().catch(error => {
+                            console.log('自动播放被阻止，需要用户交互');
+                        });
+                    }
+                },
+                
+                toggleMusic() {
+                    this.isMusicOn = !this.isMusicOn;
+                    if (this.backgroundMusic) {
+                        if (this.isMusicOn) {
+                            this.backgroundMusic.play();
+                        } else {
+                            this.backgroundMusic.pause();
+                        }
+                    }
+                    this.saveSettings();
+                },
+                
+                toggleMusicPlayer() {
+                    this.showMusicPlayer = !this.showMusicPlayer;
+                },
+                
+                updateVolume() {
+                    if (this.backgroundMusic) {
+                        this.backgroundMusic.volume = this.volume / 100;
+                    }
+                    this.saveSettings();
+                },
+                
+                toggleSound() {
+                    this.isSoundOn = !this.isSoundOn;
+                    this.saveSettings();
+                },
+                
+                saveSettings() {
+                    GameData.saveData({
+                        currentUser: this.currentUser ? { id: this.currentUser.id } : null,
+                        isMusicOn: this.isMusicOn,
+                        isSoundOn: this.isSoundOn,
+                        volume: this.volume
+                    });
+                },
+                
+                // 用户菜单方法
+                toggleUserMenu() {
+                    this.showUserMenu = !this.showUserMenu;
+                },
+                
+                goToUserProfile() {
+                    this.currentPage = 'profile';
+                    this.showUserMenu = false;
+                },
+                
+                goToSettings() {
+                    this.currentPage = 'settings';
+                    this.showUserMenu = false;
+                },
+                
+                logout() {
+                    if (confirm('确定要退出登录吗？')) {
+                        this.currentUser = null;
+                        this.currentPage = 'map';
+                        this.showUserMenu = false;
+                        
+                        this.saveSettings();
+                        this.resetGame();
+                    }
+                },
+                
+                goToLocation(location) {
+                    if (!this.currentUser) {
+                        this.currentPage = 'login';
+                        return;
+                    }
+                    
+                    this.currentLocation = location;
+                    this.currentPage = 'game';
+                    this.resetGame();
+                },
+                
+                backToMap() {
+                    this.currentPage = 'map';
+                },
+                
+                toggleAuthMode() {
+                    this.isLoginMode = !this.isLoginMode;
+                    this.authForm.username = '';
+                    this.authForm.password = '';
+                },
+                
+                handleAuth() {
+                    if (this.isLoginMode) {
+                        this.login();
+                    } else {
+                        this.register();
+                    }
+                },
+                
+                login() {
+                    const user = this.users.find(u => 
+                        u.username === this.authForm.username && 
+                        u.password === this.authForm.password
+                    );
+                    
+                    if (user) {
+                        this.currentUser = user;
+                        this.currentPage = 'map';
+                        this.authForm.username = '';
+                        this.authForm.password = '';
+                        
+                        this.saveSettings();
+                    } else {
+                        alert('用户名或密码错误');
+                    }
+                },
+                
+                register() {
+                    if (this.users.find(u => u.username === this.authForm.username)) {
+                        alert('用户名已存在');
+                        return;
+                    }
+                    
+                    const newUser = {
+                        id: Date.now().toString(),
+                        username: this.authForm.username,
+                        password: this.authForm.password,
+                        completedLocations: 0,
+                        score: 0,
+                        registerTime: new Date().toLocaleDateString('zh-CN')
+                    };
+                    
+                    this.users.push(newUser);
+                    this.currentUser = newUser;
+                    GameData.saveUsers(this.users);
+                    
+                    this.saveSettings();
+                    
+                    this.currentPage = 'map';
+                    this.authForm.username = '';
+                    this.authForm.password = '';
+                },
+                
+                async startAdventure() {
+                    if (!this.currentLocation) return;
+                    
+                    this.gameState.isPlaying = true;
+                    this.gameState.currentStep = 0;
+                    this.gameState.storyContent = [];
+                    this.showPuzzle = false;
+                    this.puzzleSolved = false;
+                    
+                    const locationSteps = this.currentLocationData.steps;
+                    
+                    try {
+                        for (let i = 0; i < locationSteps.length; i++) {
+                            this.gameState.currentStep = i + 1;
+                            this.gameState.isLoading = true;
+                            
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+                            
+                            const step = locationSteps[i];
+                            if (step.puzzle && !this.puzzleSolved) {
+                                this.gameState.isLoading = false;
+                                this.currentPuzzle = step.puzzle;
+                                this.showPuzzle = true;
+                                this.puzzleAnswer = '';
+                                this.codeInput = '';
+                                this.selectedSequence = [];
+                                
+                                await new Promise(resolve => {
+                                    this.waitForPuzzle = resolve;
+                                });
+                                
+                                if (!this.puzzleSolved) {
+                                    this.gameState.storyContent.push({
+                                        text: "解密失败，冒险被迫终止。",
+                                        step: this.gameState.currentStep,
+                                        isSuccess: false,
+                                        isFinal: true
+                                    });
+                                    this.gameState.isPlaying = false;
+                                    return;
+                                }
+                            }
+                            
+                            const isSuccess = this.puzzleSolved || Math.random() > step.failRate;
+                            const result = isSuccess ? step.success : step.failure;
+                            
+                            this.gameState.isLoading = false;
+                            
+                            const isFinal = i === locationSteps.length - 1;
+                            this.gameState.storyContent.push({
+                                text: result.message,
+                                step: this.gameState.currentStep,
+                                isSuccess,
+                                isFinal
+                            });
+                            
+                            this.gameState.currentImage = result.image;
+                            
+                            if (!isSuccess) {
+                                this.gameState.storyContent.push({
+                                    text: "冒险被迫终止，你可以选择重新尝试。",
+                                    step: this.gameState.currentStep,
+                                    isSuccess: false,
+                                    isFinal: true
+                                });
+                                this.gameState.isPlaying = false;
+                                return;
+                            }
+                            
+                            this.showPuzzle = false;
+                            this.puzzleSolved = false;
+                            
+                            if (i < locationSteps.length - 1) {
+                                await new Promise(resolve => setTimeout(resolve, 2000));
+                            }
+                        }
+                        
+                        this.handleAdventureCompletion();
+                        
+                    } catch (error) {
+                        this.gameState.isLoading = false;
+                        this.gameState.storyContent.push({
+                            text: `发生错误: ${error}`,
+                            step: this.gameState.currentStep,
+                            isSuccess: false,
+                            isFinal: true
+                        });
+                        this.gameState.isPlaying = false;
+                    }
+                },
+                
+                handleAdventureCompletion() {
+                    let finalMessage = "";
+                    
+                    if (this.currentLocation.id === 'library') {
+                        finalMessage = "图书馆的冒险圆满结束，接下来你需要前往神秘瀑布继续寻宝之旅。";
+                    } else if (this.currentLocation.id === 'waterfall') {
+                        finalMessage = "瀑布的挑战已经克服，下一步是进入古老神庙寻找最终宝藏。";
+                    } else if (this.currentLocation.id === 'temple') {
+                        finalMessage = "恭喜你！完成了所有挑战，成功找到传说中的宝藏！";
+                        
+                        if (!this.currentUser.completedLocations) {
+                            this.currentUser.completedLocations = 0;
+                        }
+                        this.currentUser.completedLocations++;
+                        this.currentUser.score += this.currentLocationData.score;
+                        
+                        const userIndex = this.users.findIndex(u => u.id === this.currentUser.id);
+                        if (userIndex !== -1) {
+                            this.users[userIndex] = this.currentUser;
+                            GameData.saveUsers(this.users);
+                        }
+                    }
+                    
+                    this.gameState.storyContent.push({
+                        text: finalMessage,
+                        step: this.gameState.currentStep,
+                        isSuccess: true,
+                        isFinal: true
+                    });
+                    
+                    this.gameState.isPlaying = false;
+                },
+                
+                // 解密相关方法
+                checkPuzzle() {
+                    if (!this.currentPuzzle) return;
+                    
+                    let isCorrect = false;
+                    
+                    if (this.currentPuzzle.type === 'riddle') {
+                        isCorrect = this.puzzleAnswer.toLowerCase().trim() === this.currentPuzzle.answer.toLowerCase();
+                    } else if (this.currentPuzzle.type === 'code') {
+                        isCorrect = this.codeInput === this.currentPuzzle.answer;
+                    } else if (this.currentPuzzle.type === 'sequence') {
+                        isCorrect = JSON.stringify(this.selectedSequence) === JSON.stringify(this.currentPuzzle.answer);
+                    }
+                    
+                    if (isCorrect) {
+                        this.gameState.storyContent.push({
+                            text: "解密成功！你成功破解了谜题，继续前进...",
+                            step: this.gameState.currentStep,
+                            isSuccess: true,
+                            isFinal: false
+                        });
+                        this.puzzleSolved = true;
+                        this.showPuzzle = false;
+                        if (this.waitForPuzzle) {
+                            this.waitForPuzzle();
+                        }
+                    } else {
+                        alert("答案不正确，请再试一次！");
+                    }
+                },
+                
+                enterCode(num) {
+                    if (this.codeInput.length < 4) {
+                        this.codeInput += num;
+                    }
+                },
+                
+                clearCode() {
+                    this.codeInput = '';
+                },
+                
+                selectSequence(item) {
+                    if (this.selectedSequence.length < 4 && !this.selectedSequence.includes(item)) {
+                        this.selectedSequence.push(item);
+                    }
+                },
+                
+                clearSequence() {
+                    this.selectedSequence = [];
+                },
+                
+                resetGame() {
+                    this.gameState = {
+                        currentStep: 0,
+                        storyContent: [],
+                        isPlaying: false,
+                        isLoading: false,
+                        currentImage: ''
+                    };
+                    this.showPuzzle = false;
+                    this.puzzleSolved = false;
+                    this.puzzleAnswer = '';
+                    this.codeInput = '';
+                    this.selectedSequence = [];
+                }
+            },
+            mounted() {
+                // 加载用户数据
+                this.users = GameData.loadUsers();
+                
+                // 尝试加载当前用户和设置
+                const savedData = GameData.loadData();
+                if (savedData) {
+                    if (savedData.currentUser) {
+                        this.currentUser = this.users.find(u => u.id === savedData.currentUser.id) || null;
+                    }
+                    this.isMusicOn = savedData.isMusicOn !== undefined ? savedData.isMusicOn : true;
+                    this.isSoundOn = savedData.isSoundOn !== undefined ? savedData.isSoundOn : true;
+                    this.volume = savedData.volume !== undefined ? savedData.volume : 50;
+                }
+                
+                // 初始化音乐
+                this.initMusic();
+                
+                // 点击页面其他地方关闭用户菜单
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.user-menu')) {
+                        this.showUserMenu = false;
+                    }
+                });
+                
+                // 用户交互后自动播放音乐
+                document.addEventListener('click', () => {
+                    if (this.isMusicOn && this.backgroundMusic && this.backgroundMusic.paused) {
+                        this.playMusic();
+                    }
+                }, { once: true });
+            }
+        });
+    </script>
+</body>
+</html>
